@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guru — KoperasiPOS</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar"></aside>
+        <main class="main-content">
+            <div class="page-header">
+                <div class="page-header-actions">
+                    <div><h2>👩‍🏫 Pengurusan Guru</h2><p>Urus maklumat guru untuk sistem hutang</p></div>
+                    <button class="btn btn-primary" onclick="showForm()">+ Tambah Guru</button>
+                </div>
+            </div>
+            <div class="page-body">
+                <div class="table-container"><table>
+                    <thead><tr><th>Guru</th><th>ID Staf</th><th>Jabatan</th><th>Telefon</th><th>Email</th><th>Baki Hutang</th><th>Status</th><th>Tindakan</th></tr></thead>
+                    <tbody id="tableBody"></tbody>
+                </table></div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="formModal">
+        <div class="modal" style="max-width:500px;">
+            <div class="modal-header"><h3 id="formTitle">Tambah Guru</h3><button class="btn-ghost" onclick="hideForm()">✕</button></div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Nama Penuh *</label><input type="text" class="form-input" id="fname"></div>
+                    <div class="form-group"><label class="form-label">ID Staf *</label><input type="text" class="form-input" id="fstaffid" placeholder="Cth: T001"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Jabatan</label><input type="text" class="form-input" id="fdept"></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Telefon</label><input type="text" class="form-input" id="fphone"></div>
+                    <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input" id="femail"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="hideForm()">Batal</button>
+                <button class="btn btn-primary" onclick="save()">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+    (async () => {
+        const user = await APP.checkAuth('admin');
+        if (!user) return;
+        document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
+        APP.initSidebar('teachers');
+        await load();
+    })();
+
+    async function load() {
+        const teachers = await APP.api('/api/teachers');
+        document.getElementById('tableBody').innerHTML = teachers.length ? teachers.map(t => `
+            <tr>
+                <td><strong>${t.name}</strong></td>
+                <td style="font-family:monospace">${t.staff_id}</td>
+                <td>${t.department || '-'}</td>
+                <td>${t.phone || '-'}</td>
+                <td>${t.email || '-'}</td>
+                <td><strong style="color:${t.outstanding_balance > 0 ? 'var(--danger)' : 'var(--success)'}">${APP.formatRM(t.outstanding_balance)}</strong></td>
+                <td>${t.is_active ? '<span class="badge badge-success">Aktif</span>' : '<span class="badge badge-danger">Tidak Aktif</span>'}</td>
+                <td><div class="btn-group">
+                    <button class="btn btn-ghost btn-sm" onclick="edit(${t.id})">✏️</button>
+                    <a href="/credits?teacher_id=${t.id}" class="btn btn-ghost btn-sm" title="Lihat hutang">💳</a>
+                    <button class="btn btn-ghost btn-sm" onclick="toggle(${t.id})">${t.is_active ? '🚫' : '✅'}</button>
+                </div></td>
+            </tr>
+        `).join('') : '<tr><td colspan="8" class="empty-state">Tiada guru</td></tr>';
+    }
+
+    function showForm(t = null) {
+        document.getElementById('formTitle').textContent = t ? 'Kemaskini Guru' : 'Tambah Guru';
+        document.getElementById('editId').value = t ? t.id : '';
+        document.getElementById('fname').value = t ? t.name : '';
+        document.getElementById('fstaffid').value = t ? t.staff_id : '';
+        document.getElementById('fdept').value = t ? t.department || '' : '';
+        document.getElementById('fphone').value = t ? t.phone || '' : '';
+        document.getElementById('femail').value = t ? t.email || '' : '';
+        document.getElementById('formModal').classList.add('active');
+    }
+    function hideForm() { document.getElementById('formModal').classList.remove('active'); }
+
+    async function edit(id) { const t = await APP.api(`/api/teachers/${id}`); showForm(t); }
+
+    async function save() {
+        const id = document.getElementById('editId').value;
+        const body = { name: document.getElementById('fname').value, staff_id: document.getElementById('fstaffid').value, department: document.getElementById('fdept').value, phone: document.getElementById('fphone').value, email: document.getElementById('femail').value };
+        try {
+            if (id) await APP.api(`/api/teachers/${id}`, { method: 'PUT', body });
+            else await APP.api('/api/teachers', { method: 'POST', body });
+            hideForm(); await load(); APP.toast('Guru berjaya disimpan', 'success');
+        } catch (err) { APP.toast(err.message, 'error'); }
+    }
+
+    async function toggle(id) {
+        try { await APP.api(`/api/teachers/${id}/toggle`, { method: 'PATCH' }); await load(); }
+        catch (err) { APP.toast(err.message, 'error'); }
+    }
+    </script>
+</body>
+</html>

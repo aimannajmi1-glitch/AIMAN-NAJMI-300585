@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syif — KoperasiPOS</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar"></aside>
+        <main class="main-content">
+            <div class="page-header">
+                <div class="page-header-actions">
+                    <div><h2>⏰ Pengurusan Syif</h2><p>Rekod syif dan penyesuaian tunai</p></div>
+                    <div class="filter-tabs" id="statusFilter" style="display:inline-flex;">
+                        <button class="filter-tab active" data-status="">Semua</button>
+                        <button class="filter-tab" data-status="open">Terbuka</button>
+                        <button class="filter-tab" data-status="closed">Ditutup</button>
+                        <button class="filter-tab" data-status="reconciled">Disahkan</button>
+                    </div>
+                </div>
+            </div>
+            <div class="page-body">
+                <div class="table-container"><table>
+                    <thead><tr><th>ID</th><th>Juruwang</th><th>Mula</th><th>Tamat</th><th>Tunai Buka</th><th>Jualan</th><th>Transaksi</th><th>Perbezaan</th><th>Status</th><th>Tindakan</th></tr></thead>
+                    <tbody id="tableBody"></tbody>
+                </table></div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal" style="max-width:550px;">
+            <div class="modal-header"><h3>⏰ Butiran Syif</h3><button class="btn-ghost" onclick="document.getElementById('detailModal').classList.remove('active')">✕</button></div>
+            <div class="modal-body" id="shiftDetail"></div>
+            <div class="modal-footer" id="detailFooter"></div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+    let currentFilter = '';
+
+    (async () => {
+        const user = await APP.checkAuth('admin');
+        if (!user) return;
+        document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
+        APP.initSidebar('shifts');
+        await loadShifts();
+
+        document.querySelectorAll('#statusFilter .filter-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#statusFilter .filter-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.status;
+                loadShifts();
+            });
+        });
+    })();
+
+    async function loadShifts() {
+        let url = '/api/shifts';
+        if (currentFilter) url += `?status=${currentFilter}`;
+        const shifts = await APP.api(url);
+
+        document.getElementById('tableBody').innerHTML = shifts.length ? shifts.map(s => {
+            const statusBadge = s.status === 'open' ? '<span class="badge badge-warning">Terbuka</span>' :
+                s.status === 'closed' ? '<span class="badge badge-info">Ditutup</span>' :
+                '<span class="badge badge-success">Disahkan</span>';
+            const variance = s.cash_variance !== null ? (s.cash_variance >= 0 ? `<span style="color:var(--success)">+${APP.formatRM(s.cash_variance)}</span>` : `<span style="color:var(--danger)">${APP.formatRM(s.cash_variance)}</span>`) : '-';
+            return `<tr>
+                <td>#${s.id}</td>
+                <td>${s.cashier_name}</td>
+                <td>${s.start_time ? s.start_time.substring(0,16) : '-'}</td>
+                <td>${s.end_time ? s.end_time.substring(11,16) : '-'}</td>
+                <td>${APP.formatRM(s.opening_cash)}</td>
+                <td><strong>${APP.formatRM(s.total_sales)}</strong></td>
+                <td>${s.total_transactions}</td>
+                <td>${variance}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <div class="btn-group">
+                        <button class="btn btn-ghost btn-sm" onclick="viewShift(${s.id})">👁️</button>
+                        ${s.status === 'closed' ? `<button class="btn btn-ghost btn-sm" onclick="reconcileShift(${s.id})" title="Sahkan">✅</button>` : ''}
+                    </div>
+                </td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="10" class="empty-state">Tiada rekod syif</td></tr>';
+    }
+
+    async function viewShift(id) {
+        const shift = await APP.api(`/api/shifts/${id}`);
+        document.getElementById('shiftDetail').innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                <div class="stat-card" style="padding:14px;--stat-color:var(--success)"><div class="stat-value" style="font-size:1.1rem">${APP.formatRM(shift.total_cash_sales)}</div><div class="stat-label">Jualan Tunai</div></div>
+                <div class="stat-card" style="padding:14px;--stat-color:var(--qr-color)"><div class="stat-value" style="font-size:1.1rem">${APP.formatRM(shift.total_qr_sales)}</div><div class="stat-label">Jualan QR</div></div>
+            </div>
+            <div style="background:var(--bg-secondary);padding:14px;border-radius:8px;font-size:0.85rem;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--text-muted)">Juruwang:</span><span>${shift.cashier_name}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--text-muted)">Masa Mula:</span><span>${shift.start_time}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--text-muted)">Masa Tamat:</span><span>${shift.end_time || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--text-muted)">Tunai Pembukaan:</span><span>${APP.formatRM(shift.opening_cash)}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--text-muted)">Tunai Penutup:</span><span>${shift.closing_cash !== null ? APP.formatRM(shift.closing_cash) : '-'}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--text-muted)">Jangkaan:</span><span>${shift.expected_cash !== null ? APP.formatRM(shift.expected_cash) : '-'}</span></div>
+                <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--border);padding-top:8px;margin-top:8px;"><span>Perbezaan:</span><span style="color:${shift.cash_variance >= 0 ? 'var(--success)' : 'var(--danger)'}">${shift.cash_variance !== null ? APP.formatRM(shift.cash_variance) : '-'}</span></div>
+            </div>
+            ${shift.notes ? `<div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:8px;font-size:0.85rem;"><strong>Nota:</strong> ${shift.notes}</div>` : ''}
+        `;
+        document.getElementById('detailFooter').innerHTML = shift.status === 'closed' ? `<button class="btn btn-success" onclick="reconcileShift(${shift.id})">✅ Sahkan Syif</button>` : '';
+        document.getElementById('detailModal').classList.add('active');
+    }
+
+    async function reconcileShift(id) {
+        try {
+            await APP.api(`/api/shifts/${id}/reconcile`, { method: 'POST', body: { notes: 'Disahkan oleh pentadbir' } });
+            document.getElementById('detailModal').classList.remove('active');
+            await loadShifts();
+            APP.toast('Syif berjaya disahkan', 'success');
+        } catch (err) { APP.toast(err.message, 'error'); }
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Produk — KoperasiPOS</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar"></aside>
+        <main class="main-content">
+            <div class="page-header">
+                <div class="page-header-actions">
+                    <div><h2>📦 Pengurusan Produk</h2><p>Tambah, kemaskini, dan urus produk koperasi</p></div>
+                    <div class="btn-group">
+                        <div class="search-bar"><input type="text" id="searchInput" placeholder="Cari produk..."></div>
+                        <button class="btn btn-primary" onclick="showForm()">+ Tambah Produk</button>
+                    </div>
+                </div>
+            </div>
+            <div class="page-body">
+                <div class="filter-tabs" id="categoryFilter" style="margin-bottom:16px;display:inline-flex;"></div>
+                <div class="table-container"><table>
+                    <thead><tr>
+                        <th>Produk</th><th>Kategori</th><th>Kod Bar</th><th>Harga</th><th>Quick Select</th><th>Status</th><th>Tindakan</th>
+                    </tr></thead>
+                    <tbody id="tableBody"></tbody>
+                </table></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Product Form Modal -->
+    <div class="modal-overlay" id="formModal">
+        <div class="modal" style="max-width:550px;">
+            <div class="modal-header"><h3 id="formTitle">Tambah Produk</h3><button class="btn-ghost" onclick="hideForm()">✕</button></div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Nama Produk *</label><input type="text" class="form-input" id="fname" required></div>
+                    <div class="form-group"><label class="form-label">Kategori *</label><select class="form-select" id="fcategory"></select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Harga (RM) *</label><input type="number" class="form-input" id="fprice" min="0" step="0.10"></div>
+                    <div class="form-group"><label class="form-label">Kod Bar</label><input type="text" class="form-input" id="fbarcode" placeholder="Contoh: NL001"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Ikon Emoji</label><input type="text" class="form-input" id="ficon" placeholder="🍚" maxlength="4"></div>
+                    <div class="form-group"><label class="form-label">Posisi Quick Select</label><input type="number" class="form-input" id="fposition" min="1"></div>
+                </div>
+                <div class="form-group"><label class="form-check"><input type="checkbox" id="fquick"> Papar pada Quick Select Grid POS</label></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="hideForm()">Batal</button>
+                <button class="btn btn-primary" id="saveBtn" onclick="saveProduct()">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+    let products = [], categories = [];
+
+    (async () => {
+        const user = await APP.checkAuth('admin');
+        if (!user) return;
+        document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
+        APP.initSidebar('products');
+        categories = await APP.api('/api/categories');
+        await loadProducts();
+        renderCategoryFilter();
+        document.getElementById('searchInput').addEventListener('input', APP.debounce(renderTable, 200));
+    })();
+
+    async function loadProducts() {
+        products = await APP.api('/api/products');
+        renderTable();
+    }
+
+    function renderCategoryFilter() {
+        const el = document.getElementById('categoryFilter');
+        el.innerHTML = `<button class="filter-tab active" data-cat="all">Semua</button>` +
+            categories.map(c => `<button class="filter-tab" data-cat="${c.id}">${c.name}</button>`).join('');
+        el.querySelectorAll('.filter-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                el.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderTable();
+            });
+        });
+    }
+
+    function renderTable() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const catFilter = document.querySelector('#categoryFilter .filter-tab.active')?.dataset.cat || 'all';
+        let filtered = products;
+        if (catFilter !== 'all') filtered = filtered.filter(p => p.category_id == catFilter);
+        if (search) filtered = filtered.filter(p => p.name.toLowerCase().includes(search) || (p.barcode||'').toLowerCase().includes(search));
+
+        document.getElementById('tableBody').innerHTML = filtered.length ? filtered.map(p => `
+            <tr>
+                <td><strong>${p.quick_select_icon || '📦'} ${p.name}</strong></td>
+                <td><span class="badge" style="background:${p.category_color}22;color:${p.category_color}">${p.category_name}</span></td>
+                <td style="font-family:monospace">${p.barcode || '-'}</td>
+                <td><strong>${APP.formatRM(p.price)}</strong></td>
+                <td>${p.is_quick_select ? `<span class="badge badge-success">Ya (#${p.quick_select_position || '-'})</span>` : '<span class="badge" style="opacity:0.5">Tidak</span>'}</td>
+                <td>${p.is_active ? '<span class="badge badge-success">Aktif</span>' : '<span class="badge badge-danger">Tidak Aktif</span>'}</td>
+                <td>
+                    <div class="btn-group">
+                        <button class="btn btn-ghost btn-sm" onclick="editProduct(${p.id})">✏️</button>
+                        <button class="btn btn-ghost btn-sm" onclick="toggleProduct(${p.id})">${p.is_active ? '🚫' : '✅'}</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="7" class="empty-state">Tiada produk dijumpai</td></tr>';
+    }
+
+    function showForm(product = null) {
+        document.getElementById('formTitle').textContent = product ? 'Kemaskini Produk' : 'Tambah Produk';
+        document.getElementById('editId').value = product ? product.id : '';
+        document.getElementById('fname').value = product ? product.name : '';
+        document.getElementById('fprice').value = product ? product.price : '';
+        document.getElementById('fbarcode').value = product ? product.barcode || '' : '';
+        document.getElementById('ficon').value = product ? product.quick_select_icon || '' : '';
+        document.getElementById('fquick').checked = product ? product.is_quick_select : false;
+        document.getElementById('fposition').value = product ? product.quick_select_position || '' : '';
+
+        const sel = document.getElementById('fcategory');
+        sel.innerHTML = categories.map(c => `<option value="${c.id}" ${product && product.category_id == c.id ? 'selected' : ''}>${c.name}</option>`).join('');
+        document.getElementById('formModal').classList.add('active');
+    }
+
+    function hideForm() { document.getElementById('formModal').classList.remove('active'); }
+
+    async function editProduct(id) {
+        const product = await APP.api(`/api/products/${id}`);
+        showForm(product);
+    }
+
+    async function saveProduct() {
+        const id = document.getElementById('editId').value;
+        const body = {
+            name: document.getElementById('fname').value,
+            category_id: document.getElementById('fcategory').value,
+            price: document.getElementById('fprice').value,
+            barcode: document.getElementById('fbarcode').value || null,
+            quick_select_icon: document.getElementById('ficon').value || null,
+            is_quick_select: document.getElementById('fquick').checked,
+            quick_select_position: document.getElementById('fposition').value || null
+        };
+        try {
+            if (id) await APP.api(`/api/products/${id}`, { method: 'PUT', body });
+            else await APP.api('/api/products', { method: 'POST', body });
+            hideForm(); await loadProducts();
+            APP.toast(id ? 'Produk dikemaskini' : 'Produk ditambah', 'success');
+        } catch (err) { APP.toast(err.message, 'error'); }
+    }
+
+    async function toggleProduct(id) {
+        try {
+            await APP.api(`/api/products/${id}/toggle`, { method: 'PATCH' });
+            await loadProducts();
+        } catch (err) { APP.toast(err.message, 'error'); }
+    }
+    </script>
+</body>
+</html>

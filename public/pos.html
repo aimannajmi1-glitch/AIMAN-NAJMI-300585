@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal POS — KoperasiPOS</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <link rel="stylesheet" href="/css/pos.css">
+    <link rel="stylesheet" href="/css/print.css">
+</head>
+<body>
+    <div class="pos-layout">
+        <!-- Left: Products -->
+        <div class="pos-products">
+            <div class="pos-top-bar">
+                <a href="/dashboard" class="brand" style="text-decoration: none; color: var(--accent-hover);"><div class="brand-icon">🏪</div> KoperasiPOS</a>
+                <div class="pos-search">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Cari produk atau imbas kod bar...">
+                </div>
+                <div class="pos-shift-info no-shift" id="shiftInfo">Tiada Syif</div>
+                <button class="btn btn-ghost" onclick="APP.logout()" title="Log Keluar">🚪</button>
+            </div>
+            <div class="pos-categories" id="categoryTabs"></div>
+            <div class="pos-grid-wrapper">
+                <div class="pos-grid" id="productGrid"></div>
+            </div>
+        </div>
+
+        <!-- Right: Cart -->
+        <div class="pos-cart">
+            <div class="cart-header">
+                <h3>🛒 Troli <span class="cart-count" id="cartCount">0</span></h3>
+                <button class="cart-clear-btn" id="clearCartBtn">Kosongkan</button>
+            </div>
+            <div class="cart-items" id="cartItems">
+                <div class="cart-empty"><div class="empty-icon">🛒</div><p>Troli kosong</p></div>
+            </div>
+            <div class="cart-footer">
+                <div class="cart-totals">
+                    <div class="cart-total-row"><span>Jumlah Kecil</span><span id="subtotalDisplay">RM 0.00</span></div>
+                    <div class="cart-total-row">
+                        <span>Diskaun</span>
+                        <span><input type="number" id="discountInput" value="0" min="0" step="0.10" style="width:80px;padding:4px 8px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:0.85rem;text-align:right;font-family:inherit"></span>
+                    </div>
+                    <div class="cart-total-row grand-total"><span>JUMLAH</span><span class="amount" id="totalDisplay">RM 0.00</span></div>
+                </div>
+                <div class="payment-buttons">
+                    <button class="pay-btn cash-btn" id="cashPayBtn" disabled>
+                        <div class="pay-icon">💵</div>
+                        <div class="pay-label">Tunai</div>
+                        <div class="pay-shortcut">F1</div>
+                    </button>
+                    <button class="pay-btn qr-btn" id="qrPayBtn" disabled>
+                        <div class="pay-icon">📱</div>
+                        <div class="pay-label">QR Pay</div>
+                        <div class="pay-shortcut">F2</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shift Modal -->
+    <div class="modal-overlay" id="shiftModal">
+        <div class="modal">
+            <div class="modal-header"><h3>⏰ Buka Syif Baru</h3><button class="btn-ghost" onclick="document.getElementById('shiftModal').classList.remove('active')">✕</button></div>
+            <div class="modal-body">
+                <p style="color:var(--text-secondary);margin-bottom:16px;">Masukkan jumlah tunai dalam laci pada permulaan syif.</p>
+                <div class="form-group">
+                    <label class="form-label">Tunai Pembukaan (RM)</label>
+                    <input type="number" class="form-input" id="openingCash" value="50.00" min="0" step="0.50">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="document.getElementById('shiftModal').classList.remove('active')">Batal</button>
+                <button class="btn btn-primary" id="openShiftBtn">Buka Syif</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cash Payment Modal -->
+    <div class="modal-overlay" id="cashModal">
+        <div class="modal">
+            <div class="modal-header"><h3>💵 Bayaran Tunai</h3><button class="btn-ghost" onclick="document.getElementById('cashModal').classList.remove('active')">✕</button></div>
+            <div class="modal-body">
+                <div style="text-align:center;margin-bottom:12px;">
+                    <div style="font-size:0.85rem;color:var(--text-muted);">Jumlah Perlu Bayar</div>
+                    <div style="font-size:2rem;font-weight:800;color:var(--success);" id="cashTotalDisplay">RM 0.00</div>
+                </div>
+                <div class="cash-input-group">
+                    <input type="number" id="tenderedInput" placeholder="0.00" min="0" step="0.10" autofocus>
+                </div>
+                <div class="quick-cash" id="quickCashBtns"></div>
+                <div class="change-display" id="changeDisplay" style="display:none;">
+                    <div class="change-label">Baki</div>
+                    <div class="change-amount" id="changeAmount">RM 0.00</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="document.getElementById('cashModal').classList.remove('active')">Batal</button>
+                <button class="btn btn-success btn-lg" id="confirmCashBtn" disabled>Sahkan Bayaran</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div class="modal-overlay" id="receiptModal">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-header"><h3>🧾 Resit</h3><button class="btn-ghost" onclick="closeReceipt()">✕</button></div>
+            <div class="modal-body" id="receiptContent"></div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeReceipt()">Tutup</button>
+                <button class="btn btn-primary" onclick="window.print()">🖨️ Cetak</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close Shift Modal -->
+    <div class="modal-overlay" id="closeShiftModal">
+        <div class="modal">
+            <div class="modal-header"><h3>⏰ Tutup Syif</h3><button class="btn-ghost" onclick="document.getElementById('closeShiftModal').classList.remove('active')">✕</button></div>
+            <div class="modal-body">
+                <div id="shiftSummary"></div>
+                <div class="form-group" style="margin-top:16px;">
+                    <label class="form-label">Tunai Sebenar Dalam Laci (RM)</label>
+                    <input type="number" class="form-input" id="closingCash" min="0" step="0.50">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="document.getElementById('closeShiftModal').classList.remove('active')">Batal</button>
+                <button class="btn btn-danger" id="closeShiftBtn">Tutup Syif</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="barcode-indicator" id="barcodeIndicator">📦 Mengimbas kod bar...</div>
+
+    <script src="/js/app.js"></script>
+    <script src="/js/pos.js"></script>
+</body>
+</html>

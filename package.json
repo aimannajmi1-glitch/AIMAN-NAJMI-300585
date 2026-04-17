@@ -1,0 +1,21 @@
+{
+  "name": "koperasi-pos",
+  "version": "1.0.0",
+  "description": "KoperasiPOS — Malaysian School Cooperative Point of Sale System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js",
+    "dev": "node server.js",
+    "build": "node seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.0",
+    "express-session": "^1.18.0",
+    "sql.js": "^1.11.0"
+  },
+  "keywords": ["pos", "koperasi", "school", "cooperative", "point-of-sale"],
+  "author": "",
+  "license": "ISC"
+}

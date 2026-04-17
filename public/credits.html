@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hutang Guru — KoperasiPOS</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar"></aside>
+        <main class="main-content">
+            <div class="page-header">
+                <div class="page-header-actions">
+                    <div><h2>💳 Hutang Guru</h2><p>Rekod kredit dan bayaran guru</p></div>
+                    <button class="btn btn-primary" onclick="showRecordForm()">+ Rekod Bayaran / Hutang</button>
+                </div>
+            </div>
+            <div class="page-body">
+                <!-- Balances -->
+                <h3 style="margin-bottom:12px;font-size:1rem;">Baki Tertunggak</h3>
+                <div class="stats-grid" id="balancesGrid" style="margin-bottom:24px;"></div>
+
+                <!-- Ledger -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Rekod Transaksi</h3>
+                        <select class="form-select" id="teacherFilter" style="width:200px;"><option value="">Semua Guru</option></select>
+                    </div>
+                    <div class="card-body" style="padding:0;">
+                        <table><thead><tr><th>Tarikh</th><th>Guru</th><th>Jenis</th><th>Jumlah</th><th>Penerangan</th><th>Direkod Oleh</th></tr></thead>
+                        <tbody id="ledgerBody"></tbody></table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="recordModal">
+        <div class="modal">
+            <div class="modal-header"><h3>📝 Rekod Hutang / Bayaran</h3><button class="btn-ghost" onclick="document.getElementById('recordModal').classList.remove('active')">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">Guru *</label><select class="form-select" id="rTeacher"></select></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Jenis *</label>
+                        <select class="form-select" id="rType"><option value="credit">Hutang (Kredit)</option><option value="payment">Bayaran</option></select>
+                    </div>
+                    <div class="form-group"><label class="form-label">Jumlah (RM) *</label><input type="number" class="form-input" id="rAmount" min="0.01" step="0.10"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Penerangan</label><input type="text" class="form-input" id="rDesc" placeholder="Cth: Bayaran tunai / Makan tengahari"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="document.getElementById('recordModal').classList.remove('active')">Batal</button>
+                <button class="btn btn-primary" onclick="saveRecord()">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+    let teachers = [];
+
+    (async () => {
+        const user = await APP.checkAuth('admin');
+        if (!user) return;
+        document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
+        APP.initSidebar('credits');
+
+        teachers = await APP.api('/api/teachers');
+        populateTeacherSelects();
+        await loadBalances();
+        await loadLedger();
+
+        document.getElementById('teacherFilter').addEventListener('change', loadLedger);
+
+        // Check URL param
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('teacher_id')) {
+            document.getElementById('teacherFilter').value = params.get('teacher_id');
+            loadLedger();
+        }
+    })();
+
+    function populateTeacherSelects() {
+        const options = teachers.filter(t => t.is_active).map(t => `<option value="${t.id}">${t.name} (${t.staff_id})</option>`).join('');
+        document.getElementById('rTeacher').innerHTML = options;
+        document.getElementById('teacherFilter').innerHTML = `<option value="">Semua Guru</option>` + options;
+    }
+
+    async function loadBalances() {
+        const balances = await APP.api('/api/credits/balances');
+        document.getElementById('balancesGrid').innerHTML = balances.length ? balances.map(b => `
+            <div class="stat-card" style="--stat-color:var(--danger);padding:16px;">
+                <div class="stat-value" style="font-size:1.3rem;color:var(--danger)">${APP.formatRM(b.outstanding)}</div>
+                <div class="stat-label">${b.name}</div>
+                <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">${b.staff_id} • ${b.department || '-'}</div>
+            </div>
+        `).join('') : '<div class="empty-state" style="padding:20px;"><p style="color:var(--success);">✅ Tiada hutang tertunggak!</p></div>';
+    }
+
+    async function loadLedger() {
+        const teacherId = document.getElementById('teacherFilter').value;
+        let url = '/api/credits';
+        if (teacherId) url += `?teacher_id=${teacherId}`;
+
+        const credits = await APP.api(url);
+        document.getElementById('ledgerBody').innerHTML = credits.length ? credits.map(c => `
+            <tr>
+                <td>${c.created_at ? c.created_at.substring(0, 10) : '-'}</td>
+                <td>${c.teacher_name} <span style="color:var(--text-muted);font-size:0.75rem">(${c.staff_id})</span></td>
+                <td>${c.type === 'credit' ? '<span class="badge badge-danger">Hutang</span>' : '<span class="badge badge-success">Bayaran</span>'}</td>
+                <td><strong>${APP.formatRM(c.amount)}</strong></td>
+                <td>${c.description || '-'}</td>
+                <td>${c.recorded_by_name}</td>
+            </tr>
+        `).join('') : '<tr><td colspan="6" class="empty-state">Tiada rekod</td></tr>';
+    }
+
+    function showRecordForm() { document.getElementById('recordModal').classList.add('active'); }
+
+    async function saveRecord() {
+        const body = {
+            teacher_id: document.getElementById('rTeacher').value,
+            type: document.getElementById('rType').value,
+            amount: document.getElementById('rAmount').value,
+            description: document.getElementById('rDesc').value
+        };
+        try {
+            await APP.api('/api/credits', { method: 'POST', body });
+            document.getElementById('recordModal').classList.remove('active');
+            await loadBalances();
+            await loadLedger();
+            APP.toast('Berjaya direkodkan', 'success');
+        } catch (err) { APP.toast(err.message, 'error'); }
+    }
+    </script>
+</body>
+</html>

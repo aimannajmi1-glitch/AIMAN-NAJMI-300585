@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jualan — KoperasiPOS</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar"></aside>
+        <main class="main-content">
+            <div class="page-header">
+                <div class="page-header-actions">
+                    <div><h2>🧾 Log Transaksi</h2><p>Rekod semua jualan dan transaksi</p></div>
+                    <div class="btn-group">
+                        <input type="date" class="form-input" id="dateFilter" style="width:auto;">
+                        <div class="search-bar"><input type="text" id="searchInput" placeholder="Cari resit..."></div>
+                    </div>
+                </div>
+            </div>
+            <div class="page-body">
+                <div class="filter-tabs" id="statusFilter" style="margin-bottom:16px;display:inline-flex;">
+                    <button class="filter-tab active" data-status="">Semua</button>
+                    <button class="filter-tab" data-status="completed">Selesai</button>
+                    <button class="filter-tab" data-status="voided">Dibatal</button>
+                </div>
+                <div class="table-container"><table>
+                    <thead><tr><th>No. Resit</th><th>Masa</th><th>Juruwang</th><th>Item</th><th>Jumlah</th><th>Bayaran</th><th>Status</th><th>Tindakan</th></tr></thead>
+                    <tbody id="tableBody"></tbody>
+                </table></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Sale Detail Modal -->
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal" style="max-width:500px;">
+            <div class="modal-header"><h3>🧾 Butiran Jualan</h3><button class="btn-ghost" onclick="document.getElementById('detailModal').classList.remove('active')">✕</button></div>
+            <div class="modal-body" id="saleDetail"></div>
+            <div class="modal-footer" id="detailFooter"></div>
+        </div>
+    </div>
+
+    <!-- Void Modal -->
+    <div class="modal-overlay" id="voidModal">
+        <div class="modal">
+            <div class="modal-header"><h3>⚠️ Batal Jualan</h3><button class="btn-ghost" onclick="document.getElementById('voidModal').classList.remove('active')">✕</button></div>
+            <div class="modal-body">
+                <p style="color:var(--danger);margin-bottom:12px;">Tindakan ini tidak boleh dibatalkan.</p>
+                <input type="hidden" id="voidSaleId">
+                <div class="form-group"><label class="form-label">Alasan Pembatalan *</label><textarea class="form-textarea" id="voidReason" placeholder="Masukkan alasan..."></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="document.getElementById('voidModal').classList.remove('active')">Kembali</button>
+                <button class="btn btn-danger" onclick="confirmVoid()">Sahkan Pembatalan</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script>
+    let currentStatus = '';
+
+    (async () => {
+        const user = await APP.checkAuth('admin');
+        if (!user) return;
+        document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
+        APP.initSidebar('sales');
+        document.getElementById('dateFilter').value = new Date().toISOString().split('T')[0];
+        await loadSales();
+
+        document.getElementById('dateFilter').addEventListener('change', loadSales);
+        document.getElementById('searchInput').addEventListener('input', APP.debounce(loadSales, 300));
+        document.querySelectorAll('#statusFilter .filter-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#statusFilter .filter-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentStatus = btn.dataset.status;
+                loadSales();
+            });
+        });
+    })();
+
+    async function loadSales() {
+        const date = document.getElementById('dateFilter').value;
+        const search = document.getElementById('searchInput').value;
+        let url = `/api/sales?date=${date}`;
+        if (currentStatus) url += `&status=${currentStatus}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+
+        const data = await APP.api(url);
+        const sales = data.sales || [];
+
+        document.getElementById('tableBody').innerHTML = sales.length ? sales.map(s => `
+            <tr>
+                <td><strong style="font-family:monospace">${s.receipt_no}</strong></td>
+                <td>${s.sale_time ? s.sale_time.substring(11, 16) : '-'}</td>
+                <td>${s.cashier_name}</td>
+                <td>-</td>
+                <td><strong>${APP.formatRM(s.total_amount)}</strong></td>
+                <td>${s.payment_method === 'cash' ? '<span class="badge badge-cash">💵 Tunai</span>' : '<span class="badge badge-qr">📱 QR Pay</span>'}</td>
+                <td>${s.status === 'completed' ? '<span class="badge badge-success">Selesai</span>' : '<span class="badge badge-danger">Dibatal</span>'}</td>
+                <td>
+                    <div class="btn-group">
+                        <button class="btn btn-ghost btn-sm" onclick="viewSale(${s.id})">👁️</button>
+                        ${s.status === 'completed' ? `<button class="btn btn-ghost btn-sm" onclick="voidSale(${s.id})">🚫</button>` : ''}
+                    </div>
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="8" class="empty-state">Tiada rekod jualan</td></tr>';
+    }
+
+    async function viewSale(id) {
+        const sale = await APP.api(`/api/sales/${id}`);
+        document.getElementById('saleDetail').innerHTML = `
+            <div style="margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                    <span style="color:var(--text-muted)">No. Resit:</span><span style="font-family:monospace;font-weight:700">${sale.receipt_no}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                    <span style="color:var(--text-muted)">Masa:</span><span>${sale.sale_time}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                    <span style="color:var(--text-muted)">Juruwang:</span><span>${sale.cashier_name}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                    <span style="color:var(--text-muted)">Bayaran:</span><span>${sale.payment_method === 'cash' ? 'Tunai' : 'QR Pay'}</span>
+                </div>
+            </div>
+            <div class="table-container"><table>
+                <thead><tr><th>Produk</th><th>Harga</th><th>Qty</th><th>Jumlah</th></tr></thead>
+                <tbody>${sale.items.map(i => `<tr><td>${i.product_name}</td><td>${APP.formatRM(i.unit_price)}</td><td>${i.quantity}</td><td>${APP.formatRM(i.line_total)}</td></tr>`).join('')}</tbody>
+            </table></div>
+            <div style="margin-top:16px;padding:12px;background:var(--bg-secondary);border-radius:8px;">
+                <div style="display:flex;justify-content:space-between;"><span>Jumlah Kecil:</span><span>${APP.formatRM(sale.subtotal)}</span></div>
+                ${sale.discount_amount > 0 ? `<div style="display:flex;justify-content:space-between;"><span>Diskaun:</span><span>-${APP.formatRM(sale.discount_amount)}</span></div>` : ''}
+                <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1.1rem;border-top:1px solid var(--border);padding-top:8px;margin-top:8px;"><span>JUMLAH:</span><span style="color:var(--success)">${APP.formatRM(sale.total_amount)}</span></div>
+            </div>
+        `;
+        document.getElementById('detailModal').classList.add('active');
+    }
+
+    function voidSale(id) {
+        document.getElementById('voidSaleId').value = id;
+        document.getElementById('voidReason').value = '';
+        document.getElementById('voidModal').classList.add('active');
+    }
+
+    async function confirmVoid() {
+        const id = document.getElementById('voidSaleId').value;
+        const reason = document.getElementById('voidReason').value;
+        if (!reason) { APP.toast('Alasan diperlukan', 'error'); return; }
+        try {
+            await APP.api(`/api/sales/${id}/void`, { method: 'POST', body: { reason } });
+            document.getElementById('voidModal').classList.remove('active');
+            await loadSales();
+            APP.toast('Jualan berjaya dibatalkan', 'success');
+        } catch (err) { APP.toast(err.message, 'error'); }
+    }
+    </script>
+</body>
+</html>

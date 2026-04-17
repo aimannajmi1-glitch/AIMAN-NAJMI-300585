@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan — KoperasiPOS</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <link rel="stylesheet" href="/css/print.css">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar" id="sidebar"></aside>
+        <main class="main-content">
+            <div class="page-header">
+                <div class="page-header-actions">
+                    <div><h2>📋 Laporan Kewangan</h2><p>Laporan harian dan bulanan</p></div>
+                    <div class="btn-group no-print">
+                        <select class="form-select" id="reportType" style="width:auto;">
+                            <option value="daily">Laporan Harian</option>
+                            <option value="monthly">Laporan Bulanan</option>
+                        </select>
+                        <input type="date" class="form-input" id="reportDate" style="width:auto;">
+                        <input type="month" class="form-input" id="reportMonth" style="width:auto;display:none;">
+                        <button class="btn btn-primary" onclick="loadReport()">Jana Laporan</button>
+                        <button class="btn btn-outline" onclick="exportCSV()">📥 Eksport CSV</button>
+                        <button class="btn btn-outline" onclick="window.print()">🖨️ Cetak</button>
+                    </div>
+                </div>
+            </div>
+            <div class="page-body" id="reportContent">
+                <div class="empty-state"><div class="empty-icon">📋</div><h3>Pilih jenis laporan dan tarikh</h3><p>Klik "Jana Laporan" untuk memaparkan data</p></div>
+            </div>
+        </main>
+    </div>
+    <script src="/js/app.js"></script>
+    <script>
+    (async () => {
+        const user = await APP.checkAuth('admin');
+        if (!user) return;
+        document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
+        APP.initSidebar('reports');
+
+        document.getElementById('reportDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('reportMonth').value = new Date().toISOString().substring(0, 7);
+
+        document.getElementById('reportType').addEventListener('change', () => {
+            const isDaily = document.getElementById('reportType').value === 'daily';
+            document.getElementById('reportDate').style.display = isDaily ? '' : 'none';
+            document.getElementById('reportMonth').style.display = isDaily ? 'none' : '';
+        });
+
+        loadReport();
+    })();
+
+    async function loadReport() {
+        const type = document.getElementById('reportType').value;
+        if (type === 'daily') await loadDaily();
+        else await loadMonthly();
+    }
+
+    async function loadDaily() {
+        const date = document.getElementById('reportDate').value;
+        const data = await APP.api(`/api/reports/daily?date=${date}`);
+        const s = data.summary;
+
+        document.getElementById('reportContent').innerHTML = `
+            <div style="text-align:center;margin-bottom:24px;padding:20px;">
+                <h2 style="font-size:1.5rem;">📋 Laporan Harian</h2>
+                <p style="color:var(--text-muted);font-size:1.1rem;">${new Date(date).toLocaleDateString('ms-MY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+
+            <div class="stats-grid stagger" style="margin-bottom:24px;">
+                <div class="stat-card" style="--stat-color:var(--success)"><div class="stat-value">${APP.formatRM(s.total_revenue)}</div><div class="stat-label">Jumlah Hasil</div></div>
+                <div class="stat-card" style="--stat-color:var(--info)"><div class="stat-value">${s.total_transactions}</div><div class="stat-label">Transaksi</div></div>
+                <div class="stat-card" style="--stat-color:var(--cash-color)"><div class="stat-value">${APP.formatRM(s.cash_total)}</div><div class="stat-label">Tunai</div></div>
+                <div class="stat-card" style="--stat-color:var(--qr-color)"><div class="stat-value">${APP.formatRM(s.qr_total)}</div><div class="stat-label">QR Pay</div></div>
+                <div class="stat-card" style="--stat-color:var(--danger)"><div class="stat-value">${s.voided_count}</div><div class="stat-label">Dibatal</div></div>
+                <div class="stat-card" style="--stat-color:var(--warning)"><div class="stat-value">${APP.formatRM(s.total_discounts)}</div><div class="stat-label">Diskaun</div></div>
+            </div>
+
+            ${data.shifts.length ? `
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-header"><h3>⏰ Syif</h3></div>
+                <div class="card-body" style="padding:0;">
+                    <table><thead><tr><th>Juruwang</th><th>Mula</th><th>Tamat</th><th>Tunai Buka</th><th>Jualan</th><th>Perbezaan</th><th>Status</th></tr></thead>
+                    <tbody>${data.shifts.map(sh => `<tr>
+                        <td>${sh.cashier_name}</td><td>${sh.start_time?.substring(11,16)||'-'}</td><td>${sh.end_time?.substring(11,16)||'-'}</td>
+                        <td>${APP.formatRM(sh.opening_cash)}</td><td>${APP.formatRM(sh.total_sales)}</td>
+                        <td style="color:${(sh.cash_variance||0)>=0?'var(--success)':'var(--danger)'}">${sh.cash_variance!==null?APP.formatRM(sh.cash_variance):'-'}</td>
+                        <td>${sh.status==='reconciled'?'<span class="badge badge-success">Disahkan</span>':`<span class="badge badge-warning">${sh.status}</span>`}</td>
+                    </tr>`).join('')}</tbody></table>
+                </div>
+            </div>` : ''}
+
+            <div class="card">
+                <div class="card-header"><h3>🧾 Senarai Transaksi (${data.sales.length})</h3></div>
+                <div class="card-body" style="padding:0;">
+                    <table><thead><tr><th>No. Resit</th><th>Masa</th><th>Bayaran</th><th>Jumlah</th><th>Status</th><th>Juruwang</th></tr></thead>
+                    <tbody>${data.sales.map(s => `<tr>
+                        <td style="font-family:monospace">${s.receipt_no}</td><td>${s.sale_time?.substring(11,16)||'-'}</td>
+                        <td>${s.payment_method==='cash'?'<span class="badge badge-cash">Tunai</span>':'<span class="badge badge-qr">QR Pay</span>'}</td>
+                        <td><strong>${APP.formatRM(s.total_amount)}</strong></td>
+                        <td>${s.status==='completed'?'<span class="badge badge-success">✓</span>':'<span class="badge badge-danger">✗</span>'}</td>
+                        <td>${s.cashier_name}</td>
+                    </tr>`).join('')}</tbody></table>
+                </div>
+            </div>
+        `;
+    }
+
+    async function loadMonthly() {
+        const month = document.getElementById('reportMonth').value;
+        const data = await APP.api(`/api/reports/monthly?month=${month}`);
+        const t = data.totals;
+        const [year, mon] = month.split('-');
+        const monthName = new Date(year, mon-1).toLocaleDateString('ms-MY', { year: 'numeric', month: 'long' });
+
+        document.getElementById('reportContent').innerHTML = `
+            <div style="text-align:center;margin-bottom:24px;padding:20px;">
+                <h2 style="font-size:1.5rem;">📋 Laporan Bulanan</h2>
+                <p style="color:var(--text-muted);font-size:1.1rem;">${monthName}</p>
+            </div>
+
+            <div class="stats-grid stagger" style="margin-bottom:24px;">
+                <div class="stat-card" style="--stat-color:var(--success)"><div class="stat-value">${APP.formatRM(t.revenue)}</div><div class="stat-label">Jumlah Hasil</div></div>
+                <div class="stat-card" style="--stat-color:var(--info)"><div class="stat-value">${t.transactions}</div><div class="stat-label">Transaksi</div></div>
+                <div class="stat-card" style="--stat-color:var(--cash-color)"><div class="stat-value">${APP.formatRM(t.cash)}</div><div class="stat-label">Tunai</div></div>
+                <div class="stat-card" style="--stat-color:var(--qr-color)"><div class="stat-value">${APP.formatRM(t.qr)}</div><div class="stat-label">QR Pay</div></div>
+                <div class="stat-card" style="--stat-color:var(--accent)"><div class="stat-value">${t.days}</div><div class="stat-label">Hari Beroperasi</div></div>
+                <div class="stat-card" style="--stat-color:var(--warning)"><div class="stat-value">${APP.formatRM(t.transactions > 0 ? t.revenue / t.transactions : 0)}</div><div class="stat-label">Purata Transaksi</div></div>
+            </div>
+
+            <div class="card" style="margin-bottom:20px;">
+                <div class="card-header"><h3>📊 Pecahan Harian</h3></div>
+                <div class="card-body" style="padding:0;">
+                    <table><thead><tr><th>Tarikh</th><th>Transaksi</th><th>Tunai</th><th>QR</th><th>Jumlah</th></tr></thead>
+                    <tbody>${data.dailyData.map(d => `<tr>
+                        <td>${d.sale_date}</td><td>${d.transactions}</td><td>${APP.formatRM(d.cash)}</td><td>${APP.formatRM(d.qr)}</td><td><strong>${APP.formatRM(d.revenue)}</strong></td>
+                    </tr>`).join('')}</tbody></table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h3>🏆 Produk Terlaris (Top 10)</h3></div>
+                <div class="card-body" style="padding:0;">
+                    <table><thead><tr><th>#</th><th>Produk</th><th>Kuantiti</th><th>Hasil</th></tr></thead>
+                    <tbody>${data.topProducts.map((p, i) => `<tr>
+                        <td>${i+1}</td><td>${p.product_name}</td><td>${p.qty}</td><td><strong>${APP.formatRM(p.revenue)}</strong></td>
+                    </tr>`).join('')}</tbody></table>
+                </div>
+            </div>
+        `;
+    }
+
+    async function exportCSV() {
+        const type = document.getElementById('reportType').value;
+        const date = document.getElementById('reportDate').value;
+        window.open(`/api/reports/export?type=${type}&date=${date}`, '_blank');
+    }
+    </script>
+</body>
+</html>
