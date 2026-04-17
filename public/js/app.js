@@ -75,23 +75,81 @@ const APP = {
 
     /** Initialize sidebar for admin pages */
     initSidebar(activePage) {
-        const navItems = document.querySelectorAll('.nav-item');
-        navItems.forEach(item => {
-            if (item.dataset.page === activePage) {
-                item.classList.add('active');
-            }
+        // Mark active nav item
+        document.querySelectorAll('.nav-item').forEach(item => {
+            if (item.dataset.page === activePage) item.classList.add('active');
         });
 
-        // Mobile toggle
-        const toggle = document.querySelector('.mobile-toggle');
+        // Inject backdrop overlay
+        let backdrop = document.getElementById('sidebarBackdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.id = 'sidebarBackdrop';
+            backdrop.className = 'sidebar-backdrop';
+            document.body.appendChild(backdrop);
+        }
+
         const sidebar = document.querySelector('.sidebar');
-        if (toggle && sidebar) {
-            toggle.addEventListener('click', () => sidebar.classList.toggle('open'));
-            document.addEventListener('click', (e) => {
-                if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== toggle) {
-                    sidebar.classList.remove('open');
-                }
+
+        const openSidebar = () => {
+            sidebar.classList.add('open');
+            backdrop.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        };
+        const closeSidebar = () => {
+            sidebar.classList.remove('open');
+            backdrop.classList.remove('active');
+            document.body.style.overflow = '';
+        };
+
+        // Mobile toggle buttons (there may be one in top bar)
+        document.querySelectorAll('.mobile-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
             });
+        });
+
+        // Close on backdrop click
+        backdrop.addEventListener('click', closeSidebar);
+
+        // Close on nav item click (mobile)
+        sidebar.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                if (window.innerWidth <= 768) closeSidebar();
+            });
+        });
+
+        // Inject mobile top bar if not present
+        if (!document.querySelector('.mobile-top-bar')) {
+            const topBar = document.createElement('div');
+            topBar.className = 'mobile-top-bar';
+            topBar.innerHTML = `
+                <button class="mobile-toggle" aria-label="Buka menu">☰</button>
+                <span class="mobile-brand">🏪 KoperasiPOS</span>
+            `;
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) mainContent.prepend(topBar);
+        }
+
+        // Inject mobile bottom nav if not present
+        if (!document.querySelector('.mobile-bottom-nav')) {
+            const nav = document.createElement('nav');
+            nav.className = 'mobile-bottom-nav';
+            const pages = [
+                { page: 'dashboard', icon: '📊', label: 'Dashboard' },
+                { page: 'pos',       icon: '🖥️', label: 'POS' },
+                { page: 'sales',     icon: '🧾', label: 'Jualan' },
+                { page: 'analytics', icon: '📈', label: 'Analitik' },
+                { page: 'shifts',    icon: '⏰', label: 'Syif' },
+            ];
+            nav.innerHTML = `<div class="mobile-bottom-nav-inner">` +
+                pages.map(p => `
+                    <a href="/${p.page}" class="mobile-nav-btn ${activePage === p.page ? 'active' : ''}">
+                        <span class="nav-emoji">${p.icon}</span>
+                        <span>${p.label}</span>
+                    </a>`).join('') +
+            `</div>`;
+            document.body.appendChild(nav);
         }
     },
 

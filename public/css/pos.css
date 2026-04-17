@@ -548,9 +548,42 @@
     transform: translateX(-50%) translateY(0);
 }
 
-/* Responsive POS */
+/* ─── POS Responsive ─── */
 @media (max-width: 900px) {
     .pos-layout { flex-direction: column; }
-    .pos-cart { width: 100%; max-height: 50vh; }
+    .pos-cart { width: 100%; max-height: 45vh; }
     .pos-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+    .pos-item { min-height: 90px; padding: 10px 6px; }
+    .pos-item .item-icon { font-size: 1.5rem; }
+    .pos-item .item-name { font-size: 0.7rem; }
+}
+
+@media (max-width: 600px) {
+    .pos-top-bar { padding: 8px 12px; gap: 8px; }
+    .pos-top-bar .brand { font-size: 0.9rem; }
+    .pos-search input { font-size: 16px; } /* prevent iOS zoom */
+    .pos-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 7px; }
+    .pos-item { min-height: 80px; padding: 8px 4px; }
+    .pos-item .item-icon { font-size: 1.4rem; margin-bottom: 4px; }
+    .pos-item .item-name { font-size: 0.65rem; }
+    .pos-item .item-price { font-size: 0.7rem; }
+    .pos-grid-wrapper { padding: 10px; }
+    .pos-cart { max-height: 50vh; }
+    .cart-footer { padding: 10px 12px; }
+    .payment-buttons { gap: 6px; }
+    .pay-btn { padding: 12px 8px; }
+    .pay-btn .pay-icon { font-size: 1.4rem; }
+    .pay-btn .pay-label { font-size: 0.75rem; }
+    .cart-item { padding: 8px 12px; }
+    .cart-item-total { min-width: 48px; font-size: 0.82rem; }
+    .cart-total-row.grand-total { font-size: 1.1rem; }
+
+    /* Shift info compact */
+    .pos-shift-info { padding: 5px 10px; font-size: 0.7rem; }
+
+    /* Cash modal on mobile → full bottom sheet */
+    .cash-input-group input { font-size: 1.6rem; padding: 12px; }
+    .quick-cash { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .quick-cash button { padding: 8px 6px; font-size: 0.85rem; }
+    .change-display .change-amount { font-size: 2rem; }
 }
