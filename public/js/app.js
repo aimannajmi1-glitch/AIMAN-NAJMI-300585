@@ -253,6 +253,22 @@ const APP = {
         }
     },
 
+    /** Initialize Theme from LocalStorage */
+    initTheme() {
+        const theme = localStorage.getItem('theme') || 'light';
+        if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        else document.documentElement.removeAttribute('data-theme');
+    },
+
+    /** Toggle Theme */
+    toggleTheme() {
+        const current = localStorage.getItem('theme') || 'light';
+        const next = current === 'light' ? 'dark' : 'light';
+        localStorage.setItem('theme', next);
+        this.initTheme();
+        window.dispatchEvent(new Event('themeChanged'));
+    },
+
     /** Render sidebar HTML */
     renderSidebar(user) {
         return `
@@ -265,28 +281,32 @@ const APP = {
         </div>
         <nav class="sidebar-nav">
             <div class="nav-section">
-                <div class="nav-section-title">Utama</div>
-                <a href="/dashboard" class="nav-item" data-page="dashboard"><span class="nav-icon">📊</span> Dashboard</a>
-                <a href="/pos" class="nav-item" data-page="pos"><span class="nav-icon">🖥️</span> Terminal POS</a>
+                <div class="nav-section-title" data-i18n="sidebar.main">Utama</div>
+                <a href="/dashboard" class="nav-item" data-page="dashboard"><span class="nav-icon">📊</span> <span data-i18n="sidebar.dashboard">Dashboard</span></a>
+                <a href="/pos" class="nav-item" data-page="pos"><span class="nav-icon">🖥️</span> <span data-i18n="sidebar.pos">Terminal POS</span></a>
             </div>
             <div class="nav-section">
-                <div class="nav-section-title">Pengurusan</div>
-                <a href="/products" class="nav-item protected-nav" data-page="products"><span class="nav-icon">📦</span> Produk</a>
-                <a href="/categories" class="nav-item protected-nav" data-page="categories"><span class="nav-icon">🏷️</span> Kategori</a>
+                <div class="nav-section-title" data-i18n="sidebar.management">Pengurusan</div>
+                <a href="/products" class="nav-item protected-nav" data-page="products"><span class="nav-icon">📦</span> <span data-i18n="sidebar.products">Produk</span></a>
+                <a href="/categories" class="nav-item protected-nav" data-page="categories"><span class="nav-icon">🏷️</span> <span data-i18n="sidebar.categories">Kategori</span></a>
             </div>
             <div class="nav-section">
-                <div class="nav-section-title">Kewangan</div>
-                <a href="/sales" class="nav-item" data-page="sales"><span class="nav-icon">🧾</span> Jualan</a>
-                <a href="/shifts" class="nav-item protected-nav" data-page="shifts"><span class="nav-icon">⏰</span> Syif</a>
-                <a href="/teachers" class="nav-item" data-page="teachers"><span class="nav-icon">👩‍🏫</span> Guru</a>
-                <a href="/credits" class="nav-item" data-page="credits"><span class="nav-icon">💳</span> Hutang Guru</a>
+                <div class="nav-section-title" data-i18n="sidebar.finance">Kewangan</div>
+                <a href="/sales" class="nav-item" data-page="sales"><span class="nav-icon">🧾</span> <span data-i18n="sidebar.sales">Jualan</span></a>
+                <a href="/shifts" class="nav-item protected-nav" data-page="shifts"><span class="nav-icon">⏰</span> <span data-i18n="sidebar.shifts">Syif</span></a>
+                <a href="/teachers" class="nav-item" data-page="teachers"><span class="nav-icon">👩‍🏫</span> <span data-i18n="sidebar.teachers">Guru</span></a>
+                <a href="/credits" class="nav-item" data-page="credits"><span class="nav-icon">💳</span> <span data-i18n="sidebar.credits">Hutang Guru</span></a>
             </div>
             <div class="nav-section">
-                <div class="nav-section-title">Laporan</div>
-                <a href="/analytics" class="nav-item" data-page="analytics"><span class="nav-icon">📈</span> Analitik</a>
-                <a href="/reports" class="nav-item" data-page="reports"><span class="nav-icon">📋</span> Laporan</a>
+                <div class="nav-section-title" data-i18n="sidebar.reports">Laporan</div>
+                <a href="/analytics" class="nav-item" data-page="analytics"><span class="nav-icon">📈</span> <span data-i18n="sidebar.analytics">Analitik</span></a>
+                <a href="/reports" class="nav-item" data-page="reports"><span class="nav-icon">📋</span> <span data-i18n="sidebar.reports_page">Laporan</span></a>
             </div>
         </nav>
+        <div class="sidebar-toggles" style="padding:0 20px 10px; display:flex; gap:10px;">
+            <button class="btn btn-outline" style="flex:1; padding:6px; font-size:1rem;" onclick="APP.toggleTheme()" title="Toggle Theme">🌙/☀️</button>
+            <button class="btn btn-outline" style="flex:1; padding:6px; font-size:0.85rem; font-weight:bold;" onclick="if(window.I18N) window.I18N.toggleLang()" title="Toggle Language">🌐 EN/MS</button>
+        </div>
         <div class="sidebar-footer">
             <div class="user-card">
                 <div class="user-avatar">${(user.name || 'U')[0].toUpperCase()}</div>
@@ -331,3 +351,6 @@ const APP = {
         return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
     }
 };
+
+// Initialize theme immediately to prevent flash
+APP.initTheme();
