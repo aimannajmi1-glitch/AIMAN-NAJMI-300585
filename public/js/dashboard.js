@@ -136,7 +136,7 @@
                 legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true } }
             }
         }
-    });
+    }));
 
     // Top products
     const products = await APP.api('/api/analytics/products?limit=8');
