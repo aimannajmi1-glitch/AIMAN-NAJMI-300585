@@ -110,16 +110,31 @@
             </div>
             ${shift.notes ? `<div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:8px;font-size:0.85rem;"><strong>Nota:</strong> ${shift.notes}</div>` : ''}
         `;
-        document.getElementById('detailFooter').innerHTML = shift.status === 'closed' ? `<button class="btn btn-success" onclick="reconcileShift(${shift.id})">✅ Sahkan Syif</button>` : '';
+        document.getElementById('detailFooter').innerHTML = shift.status === 'closed' ? `
+            <div style="width:100%;text-align:left;">
+                <label style="display:block;font-size:0.85rem;color:var(--text-secondary);margin-bottom:4px;">Tunai Sebenar Dalam Laci (RM)</label>
+                <input type="number" id="reconcileCash" class="form-input" style="width:100%;margin-bottom:12px;" min="0" step="0.50" value="${(shift.expected_cash || 0).toFixed(2)}">
+                <input type="text" id="reconcileNotes" class="form-input" style="width:100%;margin-bottom:12px;" placeholder="Nota tambahan (pilihan)...">
+                <button class="btn btn-success" style="width:100%;" onclick="reconcileShift(${shift.id})">✅ Sahkan Syif</button>
+            </div>
+        ` : '';
         document.getElementById('detailModal').classList.add('active');
     }
 
     async function reconcileShift(id) {
+        const cashInput = document.getElementById('reconcileCash');
+        const closing_cash = cashInput ? parseFloat(cashInput.value) : null;
+        if (isNaN(closing_cash)) {
+            APP.toast('Sila masukkan jumlah tunai yang sah.', 'error');
+            return;
+        }
+        const notes = document.getElementById('reconcileNotes') ? document.getElementById('reconcileNotes').value : '';
+
         try {
-            await APP.api(`/api/shifts/${id}/reconcile`, { method: 'POST', body: { notes: 'Disahkan oleh pentadbir' } });
+            const res = await APP.api(`/api/shifts/${id}/reconcile`, { method: 'POST', body: { closing_cash, notes } });
             document.getElementById('detailModal').classList.remove('active');
             await loadShifts();
-            APP.toast('Syif berjaya disahkan', 'success');
+            APP.toast(res.message, 'success');
         } catch (err) { APP.toast(err.message, 'error'); }
     }
     </script>

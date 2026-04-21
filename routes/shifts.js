@@ -75,9 +75,8 @@ router.post('/open', requireAuth, (req, res) => {
     });
 });
 
-// POST /api/shifts/close — close the current shift
+// POST /api/shifts/close — close the current shift (cashier just ends shift)
 router.post('/close', requireAuth, (req, res) => {
-    const { closing_cash } = req.body;
     const userId = req.session.user.id;
     const db = getDb();
 
@@ -92,12 +91,11 @@ router.post('/close', requireAuth, (req, res) => {
 
     const shift = shifts[0];
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const closingAmount = parseFloat(closing_cash) || 0;
+    // Cashier does not declare closing cash. Admin does during reconcile.
     const expectedCash = shift.opening_cash + shift.total_cash_sales;
-    const variance = Math.round((closingAmount - expectedCash) * 100) / 100;
 
-    db.run(`UPDATE shifts SET end_time=?, closing_cash=?, expected_cash=?, cash_variance=?, status='closed' WHERE id=?`,
-        [now, closingAmount, expectedCash, variance, shift.id]);
+    db.run(`UPDATE shifts SET end_time=?, expected_cash=?, status='closed' WHERE id=?`,
+        [now, expectedCash, shift.id]);
     saveDb();
 
     res.json({
@@ -105,9 +103,7 @@ router.post('/close', requireAuth, (req, res) => {
         shift: {
             ...shift,
             end_time: now,
-            closing_cash: closingAmount,
             expected_cash: expectedCash,
-            cash_variance: variance,
             status: 'closed'
         }
     });
@@ -134,14 +130,25 @@ router.get('/:id', requireAuth, (req, res) => {
 
 // POST /api/shifts/:id/reconcile — mark shift as reconciled (admin)
 router.post('/:id/reconcile', requireAdmin, (req, res) => {
-    const { notes } = req.body;
+    const { notes, closing_cash } = req.body;
     const db = getDb();
 
-    db.run(`UPDATE shifts SET status = 'reconciled', notes = ? WHERE id = ? AND status = 'closed'`,
-        [notes || null, req.params.id]);
+    const shiftResult = db.exec(`SELECT * FROM shifts WHERE id = ? AND status = 'closed'`, [req.params.id]);
+    const shifts = toObjects(shiftResult);
+    if (!shifts.length) return res.status(400).json({ error: 'Syif tidak dijumpai atau bukan berstatus ditutup' });
+
+    const shift = shifts[0];
+    const closingAmount = parseFloat(closing_cash);
+    if (isNaN(closingAmount)) return res.status(400).json({ error: 'Sila masukkan tunai penutup yang sah' });
+
+    const expectedCash = shift.expected_cash || (shift.opening_cash + shift.total_cash_sales);
+    const variance = Math.round((closingAmount - expectedCash) * 100) / 100;
+
+    db.run(`UPDATE shifts SET closing_cash = ?, cash_variance = ?, status = 'reconciled', notes = ? WHERE id = ?`,
+        [closingAmount, variance, notes || null, req.params.id]);
     saveDb();
 
-    res.json({ message: 'Syif berjaya disahkan' });
+    res.json({ message: 'Syif berjaya disahkan', variance });
 });
 
 module.exports = router;

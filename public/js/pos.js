@@ -402,22 +402,17 @@ async function showCloseShiftModal() {
             </div>
         </div>
     `;
-    document.getElementById('closingCash').value = (currentShift.opening_cash + currentShift.total_cash_sales).toFixed(2);
     document.getElementById('closeShiftModal').classList.add('active');
 }
 
 async function closeShift() {
-    const closingCash = parseFloat(document.getElementById('closingCash').value) || 0;
     try {
-        const result = await APP.api('/api/shifts/close', { method: 'POST', body: { closing_cash: closingCash } });
+        const result = await APP.api('/api/shifts/close', { method: 'POST' });
         document.getElementById('closeShiftModal').classList.remove('active');
         currentShift = null;
         updateShiftDisplay();
 
-        const variance = result.shift.cash_variance;
-        const msg = variance === 0 ? 'Tiada perbezaan tunai. 🎯' :
-            `Perbezaan tunai: ${APP.formatRM(Math.abs(variance))} ${variance > 0 ? '(lebihan)' : '(kurang)'}`;
-        APP.toast(`Syif ditutup. ${msg}`, variance === 0 ? 'success' : 'info');
+        APP.toast(`Syif berjaya ditutup.`, 'success');
     } catch (err) {
         APP.toast(err.message, 'error');
     }
