@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analitik — KoperasiPOS</title>
+    <title>Analitik — N.A.D.I.</title>
     <link rel="stylesheet" href="/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
@@ -66,6 +66,9 @@
         if (!user) return;
         document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
         APP.initSidebar('analytics');
+        APP.initProtectedNav();
+        APP.initInactivityTimer();
+        await APP.enforceShiftGate();
 
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = '#2a3452';

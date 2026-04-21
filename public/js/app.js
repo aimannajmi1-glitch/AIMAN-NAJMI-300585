@@ -1,9 +1,12 @@
 /**
- * KoperasiPOS — Global JavaScript Utilities
+ * N.A.D.I. POS — Global JavaScript Utilities
+ * Sistem Jualan Koperasi Sekolah
  */
 
 const APP = {
     currency: 'RM',
+    _inactivityTimer: null,
+    _shiftGateActive: false,
 
     /** Format number as RM currency */
     formatRM(amount) {
@@ -20,17 +23,14 @@ const APP = {
         if (options.body && typeof options.body === 'object') {
             config.body = JSON.stringify(options.body);
         }
-
         try {
             const res = await fetch(url, config);
             const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || `Request failed (${res.status})`);
-            }
+            if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
             return data;
         } catch (err) {
             if (err.message === 'Unexpected end of JSON input') {
-                throw new Error('Server error. Please try again.');
+                throw new Error('Server error. Sila cuba lagi.');
             }
             throw err;
         }
@@ -44,28 +44,35 @@ const APP = {
             container.className = 'toast-container';
             document.body.appendChild(container);
         }
-
-        const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+        const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
         toast.innerHTML = `<span>${icons[type] || ''}</span><span>${message}</span>`;
         container.appendChild(toast);
-
         requestAnimationFrame(() => toast.classList.add('show'));
-
         setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
-        }, 3000);
+        }, 3500);
     },
 
-    /** Check if user is authenticated — LOGIN DISABLED, returns default admin */
+    /** Check if user is authenticated — redirects to login if not */
     async checkAuth(requiredRole = null) {
-        // Login temporarily disabled — return default admin user
-        return { id: 1, username: 'Admin', name: 'Puan Siti Nurhaliza', role: 'admin' };
+        try {
+            const data = await this.api('/api/auth/me');
+            const user = data.user;
+            if (requiredRole && user.role !== requiredRole) {
+                window.location.href = '/login';
+                return null;
+            }
+            return user;
+        } catch {
+            window.location.href = '/login';
+            return null;
+        }
     },
 
-    /** Logout */
+    /** Logout — auto-closes shift via API */
     async logout() {
         try {
             await this.api('/api/auth/logout', { method: 'POST' });
@@ -73,14 +80,140 @@ const APP = {
         window.location.href = '/login';
     },
 
+    /** 30-minute inactivity auto-logout */
+    initInactivityTimer() {
+        const TIMEOUT = 30 * 60 * 1000; // 30 minutes
+        const reset = () => {
+            clearTimeout(this._inactivityTimer);
+            this._inactivityTimer = setTimeout(async () => {
+                this.toast('Sesi tamat kerana tidak aktif selama 30 minit. Log keluar...', 'warning');
+                await new Promise(r => setTimeout(r, 2500));
+                this.logout();
+            }, TIMEOUT);
+        };
+        ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach(e =>
+            document.addEventListener(e, reset, { passive: true })
+        );
+        reset();
+    },
+
+    /** Shift Gate — blocks all content until a shift is opened */
+    async enforceShiftGate() {
+        try {
+            const shift = await this.api('/api/shifts/current');
+            if (!shift) {
+                this._showShiftGate();
+            }
+            return shift;
+        } catch {
+            this._showShiftGate();
+            return null;
+        }
+    },
+
+    _showShiftGate() {
+        if (document.getElementById('shiftGateOverlay')) return;
+        this._shiftGateActive = true;
+        const overlay = document.createElement('div');
+        overlay.id = 'shiftGateOverlay';
+        overlay.className = 'shift-gate-overlay';
+        overlay.innerHTML = `
+            <div class="shift-gate-card">
+                <div class="shift-gate-icon">⚠️</div>
+                <h2>Syif Belum Dibuka</h2>
+                <p>Anda perlu membuka syif baharu sebelum boleh menggunakan sistem ini. Pastikan anda bersedia untuk memulakan operasi harian.</p>
+                <div class="form-group" style="margin-top:20px;">
+                    <label class="form-label">Wang Tunai Pembukaan (RM)</label>
+                    <input type="number" id="gateOpeningCash" class="form-input" placeholder="0.00" min="0" step="0.01">
+                </div>
+                <button class="btn btn-primary btn-lg" id="gateOpenShiftBtn" style="width:100%;margin-top:12px;">
+                    🔓 Buka Syif Sekarang
+                </button>
+                <button class="btn btn-ghost" onclick="APP.logout()" style="width:100%;margin-top:8px;">
+                    Keluar dari Sistem
+                </button>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        document.getElementById('gateOpenShiftBtn').addEventListener('click', async () => {
+            const cash = parseFloat(document.getElementById('gateOpeningCash').value) || 0;
+            const btn = document.getElementById('gateOpenShiftBtn');
+            btn.disabled = true;
+            btn.textContent = 'Membuka...';
+            try {
+                await this.api('/api/shifts/open', { method: 'POST', body: { opening_cash: cash } });
+                overlay.remove();
+                this._shiftGateActive = false;
+                this.toast('Syif berjaya dibuka! Selamat bertugas.', 'success');
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = '🔓 Buka Syif Sekarang';
+                this.toast(err.message, 'error');
+            }
+        });
+    },
+
+    /** PIN Gate — requires user to verify their password before accessing restricted content */
+    async requirePIN(title = 'Kawalan Akses', reason = 'Bahagian ini memerlukan pengesahan kata laluan pentadbir.') {
+        return new Promise((resolve) => {
+            if (document.getElementById('pinGateModal')) {
+                document.getElementById('pinGateModal').remove();
+            }
+            const modal = document.createElement('div');
+            modal.id = 'pinGateModal';
+            modal.className = 'modal-overlay active';
+            modal.innerHTML = `
+                <div class="modal" style="max-width:380px;">
+                    <div class="modal-header">
+                        <h3>🔐 ${title}</h3>
+                        <button class="btn btn-ghost btn-icon" id="pinGateClose">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.9rem;">${reason}</p>
+                        <div class="form-group">
+                            <label class="form-label">Kata Laluan Anda</label>
+                            <input type="password" id="pinGateInput" class="form-input" placeholder="Masukkan kata laluan..." autocomplete="current-password">
+                        </div>
+                        <div id="pinGateError" style="color:var(--danger);font-size:0.82rem;min-height:20px;margin-top:4px;"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline" id="pinGateCancelBtn">Batal</button>
+                        <button class="btn btn-primary" id="pinGateConfirmBtn">Sahkan</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const input = document.getElementById('pinGateInput');
+            const errorEl = document.getElementById('pinGateError');
+            const close = (result) => { modal.remove(); resolve(result); };
+            document.getElementById('pinGateClose').onclick = () => close(false);
+            document.getElementById('pinGateCancelBtn').onclick = () => close(false);
+            const confirm = async () => {
+                const password = input.value.trim();
+                if (!password) { errorEl.textContent = 'Sila masukkan kata laluan.'; return; }
+                const btn = document.getElementById('pinGateConfirmBtn');
+                btn.disabled = true; btn.textContent = 'Mengesahkan...';
+                try {
+                    await this.api('/api/auth/verify-password', { method: 'POST', body: { password } });
+                    close(true);
+                } catch (err) {
+                    errorEl.textContent = err.message || 'Kata laluan tidak sah.';
+                    btn.disabled = false; btn.textContent = 'Sahkan';
+                    input.value = ''; input.focus();
+                }
+            };
+            document.getElementById('pinGateConfirmBtn').onclick = confirm;
+            input.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); });
+            setTimeout(() => input.focus(), 100);
+        });
+    },
+
     /** Initialize sidebar for admin pages */
     initSidebar(activePage) {
-        // Mark active nav item
         document.querySelectorAll('.nav-item').forEach(item => {
             if (item.dataset.page === activePage) item.classList.add('active');
         });
 
-        // Inject backdrop overlay
         let backdrop = document.getElementById('sidebarBackdrop');
         if (!backdrop) {
             backdrop = document.createElement('div');
@@ -88,66 +221,33 @@ const APP = {
             backdrop.className = 'sidebar-backdrop';
             document.body.appendChild(backdrop);
         }
-
         const sidebar = document.querySelector('.sidebar');
-
-        const openSidebar = () => {
-            sidebar.classList.add('open');
-            backdrop.classList.add('active');
-            document.body.style.overflow = 'hidden';
-        };
-        const closeSidebar = () => {
-            sidebar.classList.remove('open');
-            backdrop.classList.remove('active');
-            document.body.style.overflow = '';
-        };
-
-        // Mobile toggle buttons (there may be one in top bar)
-        document.querySelectorAll('.mobile-toggle').forEach(btn => {
-            btn.addEventListener('click', () => {
-                sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-            });
-        });
-
-        // Close on backdrop click
+        const openSidebar = () => { sidebar.classList.add('open'); backdrop.classList.add('active'); document.body.style.overflow = 'hidden'; };
+        const closeSidebar = () => { sidebar.classList.remove('open'); backdrop.classList.remove('active'); document.body.style.overflow = ''; };
+        document.querySelectorAll('.mobile-toggle').forEach(btn => btn.addEventListener('click', () => sidebar.classList.contains('open') ? closeSidebar() : openSidebar()));
         backdrop.addEventListener('click', closeSidebar);
+        sidebar.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => { if (window.innerWidth <= 768) closeSidebar(); }));
 
-        // Close on nav item click (mobile)
-        sidebar.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', () => {
-                if (window.innerWidth <= 768) closeSidebar();
-            });
-        });
-
-        // Inject mobile top bar if not present
         if (!document.querySelector('.mobile-top-bar')) {
             const topBar = document.createElement('div');
             topBar.className = 'mobile-top-bar';
-            topBar.innerHTML = `
-                <button class="mobile-toggle" aria-label="Buka menu">☰</button>
-                <span class="mobile-brand">🏪 KoperasiPOS</span>
-            `;
+            topBar.innerHTML = `<button class="mobile-toggle" aria-label="Buka menu">☰</button><span class="mobile-brand">N.A.D.I.</span>`;
             const mainContent = document.querySelector('.main-content');
             if (mainContent) mainContent.prepend(topBar);
         }
 
-        // Inject mobile bottom nav if not present
         if (!document.querySelector('.mobile-bottom-nav')) {
             const nav = document.createElement('nav');
             nav.className = 'mobile-bottom-nav';
             const pages = [
                 { page: 'dashboard', icon: '📊', label: 'Dashboard' },
-                { page: 'pos',       icon: '🖥️', label: 'POS' },
-                { page: 'sales',     icon: '🧾', label: 'Jualan' },
+                { page: 'pos', icon: '🖥️', label: 'POS' },
+                { page: 'sales', icon: '🧾', label: 'Jualan' },
                 { page: 'analytics', icon: '📈', label: 'Analitik' },
-                { page: 'shifts',    icon: '⏰', label: 'Syif' },
+                { page: 'shifts', icon: '⏰', label: 'Syif' },
             ];
             nav.innerHTML = `<div class="mobile-bottom-nav-inner">` +
-                pages.map(p => `
-                    <a href="/${p.page}" class="mobile-nav-btn ${activePage === p.page ? 'active' : ''}">
-                        <span class="nav-emoji">${p.icon}</span>
-                        <span>${p.label}</span>
-                    </a>`).join('') +
+                pages.map(p => `<a href="/${p.page}" class="mobile-nav-btn ${activePage === p.page ? 'active' : ''}"><span class="nav-emoji">${p.icon}</span><span>${p.label}</span></a>`).join('') +
             `</div>`;
             document.body.appendChild(nav);
         }
@@ -159,52 +259,32 @@ const APP = {
         <div class="sidebar-brand">
             <div class="brand-icon">🏪</div>
             <div>
-                <h1>KoperasiPOS</h1>
+                <h1>N.A.D.I.</h1>
                 <div class="brand-sub">Sistem Jualan Koperasi</div>
             </div>
         </div>
         <nav class="sidebar-nav">
             <div class="nav-section">
                 <div class="nav-section-title">Utama</div>
-                <a href="/dashboard" class="nav-item" data-page="dashboard">
-                    <span class="nav-icon">📊</span> Dashboard
-                </a>
-                <a href="/pos" class="nav-item" data-page="pos">
-                    <span class="nav-icon">🖥️</span> Terminal POS
-                </a>
+                <a href="/dashboard" class="nav-item" data-page="dashboard"><span class="nav-icon">📊</span> Dashboard</a>
+                <a href="/pos" class="nav-item" data-page="pos"><span class="nav-icon">🖥️</span> Terminal POS</a>
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Pengurusan</div>
-                <a href="/products" class="nav-item" data-page="products">
-                    <span class="nav-icon">📦</span> Produk
-                </a>
-                <a href="/categories" class="nav-item" data-page="categories">
-                    <span class="nav-icon">🏷️</span> Kategori
-                </a>
+                <a href="/products" class="nav-item protected-nav" data-page="products"><span class="nav-icon">📦</span> Produk</a>
+                <a href="/categories" class="nav-item protected-nav" data-page="categories"><span class="nav-icon">🏷️</span> Kategori</a>
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Kewangan</div>
-                <a href="/sales" class="nav-item" data-page="sales">
-                    <span class="nav-icon">🧾</span> Jualan
-                </a>
-                <a href="/shifts" class="nav-item" data-page="shifts">
-                    <span class="nav-icon">⏰</span> Syif
-                </a>
-                <a href="/teachers" class="nav-item" data-page="teachers">
-                    <span class="nav-icon">👩‍🏫</span> Guru
-                </a>
-                <a href="/credits" class="nav-item" data-page="credits">
-                    <span class="nav-icon">💳</span> Hutang Guru
-                </a>
+                <a href="/sales" class="nav-item" data-page="sales"><span class="nav-icon">🧾</span> Jualan</a>
+                <a href="/shifts" class="nav-item protected-nav" data-page="shifts"><span class="nav-icon">⏰</span> Syif</a>
+                <a href="/teachers" class="nav-item" data-page="teachers"><span class="nav-icon">👩‍🏫</span> Guru</a>
+                <a href="/credits" class="nav-item" data-page="credits"><span class="nav-icon">💳</span> Hutang Guru</a>
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Laporan</div>
-                <a href="/analytics" class="nav-item" data-page="analytics">
-                    <span class="nav-icon">📈</span> Analitik
-                </a>
-                <a href="/reports" class="nav-item" data-page="reports">
-                    <span class="nav-icon">📋</span> Laporan
-                </a>
+                <a href="/analytics" class="nav-item" data-page="analytics"><span class="nav-icon">📈</span> Analitik</a>
+                <a href="/reports" class="nav-item" data-page="reports"><span class="nav-icon">📋</span> Laporan</a>
             </div>
         </nav>
         <div class="sidebar-footer">
@@ -219,19 +299,27 @@ const APP = {
         </div>`;
     },
 
+    /** Attach PIN gate to protected nav items */
+    initProtectedNav() {
+        document.querySelectorAll('.protected-nav').forEach(link => {
+            link.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const href = link.getAttribute('href');
+                const passed = await this.requirePIN('Kawalan Akses Pengurusan', 'Bahagian ini dikhaskan untuk pentadbir. Sila masukkan kata laluan anda untuk teruskan.');
+                if (passed) window.location.href = href;
+            });
+        });
+    },
+
     /** Date formatting helpers */
     formatDate(dateStr) {
         if (!dateStr) return '-';
-        const d = new Date(dateStr);
-        return d.toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' });
+        return new Date(dateStr).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' });
     },
-
     formatTime(dateStr) {
         if (!dateStr) return '-';
-        const d = new Date(dateStr);
-        return d.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' });
+        return new Date(dateStr).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' });
     },
-
     formatDateTime(dateStr) {
         if (!dateStr) return '-';
         return `${this.formatDate(dateStr)} ${this.formatTime(dateStr)}`;
@@ -240,9 +328,6 @@ const APP = {
     /** Debounce helper */
     debounce(fn, delay = 300) {
         let timer;
-        return (...args) => {
-            clearTimeout(timer);
-            timer = setTimeout(() => fn(...args), delay);
-        };
+        return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
     }
 };

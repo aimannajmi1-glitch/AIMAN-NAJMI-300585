@@ -193,6 +193,18 @@ function createSchema() {
         )
     `);
 
+    db.run(`
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+        )
+    `);
+
+    // Default settings
+    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('discount_enabled', '0')`);
+    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('system_name', 'N.A.D.I.')`);
+
     // --- Indexes for analytics performance ---
     db.run(`CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)`);

@@ -1,18 +1,23 @@
 /**
- * Authentication Middleware
- * LOGIN TEMPORARILY DISABLED — default admin session auto-injected.
- * Re-enable by restoring original logic in this file.
+ * Authentication Middleware — N.A.D.I. POS
+ * Real session-based auth enforced.
  */
-const DEFAULT_USER = { id: 1, username: 'Admin', name: 'Puan Siti Nurhaliza', role: 'admin' };
 
 function requireAuth(req, res, next) {
-    if (!req.session.user) req.session.user = DEFAULT_USER;
+    if (!req.session || !req.session.user) {
+        return res.status(401).json({ error: 'Sila log masuk terlebih dahulu' });
+    }
     req.user = req.session.user;
     next();
 }
 
 function requireAdmin(req, res, next) {
-    if (!req.session.user) req.session.user = DEFAULT_USER;
+    if (!req.session || !req.session.user) {
+        return res.status(401).json({ error: 'Sila log masuk terlebih dahulu' });
+    }
+    if (req.session.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Akses pentadbir diperlukan' });
+    }
     req.user = req.session.user;
     next();
 }

@@ -13,9 +13,20 @@ let currentCategory = 'all';
 let barcodeBuffer = '';
 let barcodeTimer = null;
 
+let discountEnabled = false;
+
 (async () => {
     const user = await APP.checkAuth();
     if (!user) return;
+
+    APP.initInactivityTimer();
+
+    // Load settings — controls discount visibility
+    try {
+        const settings = await APP.api('/api/auth/settings');
+        discountEnabled = settings.discount_enabled === '1';
+    } catch {}
+    updateDiscountVisibility();
 
     await loadCategories();
     await loadProducts();
@@ -23,6 +34,11 @@ let barcodeTimer = null;
     setupEventListeners();
     setupBarcodeScanner();
 })();
+
+function updateDiscountVisibility() {
+    const discountRow = document.getElementById('discountRow');
+    if (discountRow) discountRow.style.display = discountEnabled ? '' : 'none';
+}
 
 async function loadCategories() {
     categories = await APP.api('/api/categories');
@@ -296,11 +312,11 @@ async function processSale(paymentMethod) {
 }
 
 function showReceipt(sale) {
-    const appConfig = { name: 'Koperasi Sekolah', address: '' };
     document.getElementById('receiptContent').innerHTML = `
         <div class="receipt">
             <div class="receipt-header">
-                <h4>🏪 ${appConfig.name}</h4>
+                <h4>🏪 N.A.D.I.</h4>
+                <p style="font-size:0.7rem;color:#666">Sistem Jualan Koperasi Sekolah</p>
                 <p>${sale.receipt_no}</p>
                 <p>${new Date(sale.sale_time).toLocaleString('ms-MY')}</p>
             </div>

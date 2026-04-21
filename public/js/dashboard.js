@@ -1,5 +1,5 @@
 /**
- * Dashboard Page Logic
+ * N.A.D.I. — Dashboard Page Logic
  */
 (async () => {
     const user = await APP.checkAuth('admin');
@@ -7,6 +7,9 @@
 
     document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
     APP.initSidebar('dashboard');
+    APP.initProtectedNav();
+    APP.initInactivityTimer();
+    await APP.enforceShiftGate();
 
     // Load summary stats
     const summary = await APP.api('/api/analytics/summary');
@@ -44,10 +47,10 @@
         </div>
     `;
 
-    // Chart defaults
-    Chart.defaults.color = '#94a3b8';
-    Chart.defaults.borderColor = '#2a3452';
-    Chart.defaults.font.family = "'Inter', sans-serif";
+    // Chart defaults — N.A.D.I. soft blue theme
+    Chart.defaults.color = '#4A6080';
+    Chart.defaults.borderColor = '#D1DCE8';
+    Chart.defaults.font.family = "'Poppins', 'Inter', sans-serif";
 
     // Revenue trend chart
     const daily = await APP.api('/api/analytics/daily?days=30');
@@ -61,19 +64,20 @@
             datasets: [{
                 label: 'Hasil (RM)',
                 data: daily.map(d => d.revenue),
-                borderColor: '#6366f1',
-                backgroundColor: 'rgba(99,102,241,0.1)',
+                borderColor: '#2563EB',
+                backgroundColor: 'rgba(37,99,235,0.08)',
                 fill: true,
                 tension: 0.4,
-                pointRadius: 2,
-                pointHoverRadius: 5,
-                borderWidth: 2
+                pointRadius: 3,
+                pointBackgroundColor: '#2563EB',
+                pointHoverRadius: 6,
+                borderWidth: 2.5
             }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: { color: '#1e293b' } }, x: { grid: { display: false } } }
+            scales: { y: { beginAtZero: true, grid: { color: '#EBF0F6' } }, x: { grid: { display: false } } }
         }
     });
 
@@ -88,16 +92,16 @@
                 label: 'Transaksi',
                 data: schoolHours.map(h => h.transactions),
                 backgroundColor: schoolHours.map(h =>
-                    (h.hour === 10 || h.hour === 12) ? 'rgba(239,68,68,0.7)' : 'rgba(99,102,241,0.5)'
+                    (h.hour === 10 || h.hour === 12) ? 'rgba(37,99,235,0.85)' : 'rgba(37,99,235,0.35)'
                 ),
-                borderRadius: 6,
+                borderRadius: 8,
                 borderSkipped: false
             }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: { color: '#1e293b' } }, x: { grid: { display: false } } }
+            scales: { y: { beginAtZero: true, grid: { color: '#EBF0F6' } }, x: { grid: { display: false } } }
         }
     });
 
@@ -112,8 +116,8 @@
             labels: ['Tunai (Cash)', 'QR Pay'],
             datasets: [{
                 data: [cashData.total_amount, qrData.total_amount],
-                backgroundColor: ['#10b981', '#8b5cf6'],
-                borderColor: '#1a2035',
+                backgroundColor: ['#059669', '#7C3AED'],
+                borderColor: '#FFFFFF',
                 borderWidth: 3,
                 hoverOffset: 8
             }]
@@ -136,8 +140,8 @@
             datasets: [{
                 label: 'Hasil (RM)',
                 data: products.map(p => p.total_revenue),
-                backgroundColor: 'rgba(99,102,241,0.6)',
-                borderRadius: 6,
+                backgroundColor: 'rgba(37,99,235,0.55)',
+                borderRadius: 8,
                 borderSkipped: false
             }]
         },
@@ -145,7 +149,7 @@
             responsive: true, maintainAspectRatio: false,
             indexAxis: 'y',
             plugins: { legend: { display: false } },
-            scales: { x: { beginAtZero: true, grid: { color: '#1e293b' } }, y: { grid: { display: false } } }
+            scales: { x: { beginAtZero: true, grid: { color: '#EBF0F6' } }, y: { grid: { display: false } } }
         }
     });
 })();

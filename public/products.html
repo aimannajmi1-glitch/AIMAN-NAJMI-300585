@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Produk — KoperasiPOS</title>
+    <title>Produk — N.A.D.I.</title>
     <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -67,6 +67,9 @@
         if (!user) return;
         document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
         APP.initSidebar('products');
+        APP.initProtectedNav();
+        APP.initInactivityTimer();
+        await APP.enforceShiftGate();
         categories = await APP.api('/api/categories');
         await loadProducts();
         renderCategoryFilter();

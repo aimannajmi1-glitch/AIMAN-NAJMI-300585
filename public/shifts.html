@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Syif — KoperasiPOS</title>
+    <title>Syif — N.A.D.I.</title>
     <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -47,6 +47,9 @@
         if (!user) return;
         document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
         APP.initSidebar('shifts');
+        APP.initProtectedNav();
+        APP.initInactivityTimer();
+        await APP.enforceShiftGate();
         await loadShifts();
 
         document.querySelectorAll('#statusFilter .filter-tab').forEach(btn => {

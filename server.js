@@ -64,9 +64,9 @@ pages.forEach(page => {
     });
 });
 
-// Root redirects to dashboard (login temporarily disabled)
+// Root redirects to login
 app.get('/', (req, res) => {
-    res.redirect('/dashboard');
+    res.redirect('/login');
 });
 
 // --- Initialize DB and Start Server ---

@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laporan — KoperasiPOS</title>
+    <title>Laporan — N.A.D.I.</title>
     <link rel="stylesheet" href="/css/app.css">
     <link rel="stylesheet" href="/css/print.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
     <div class="app-layout">
@@ -22,7 +24,8 @@
                         <input type="date" class="form-input" id="reportDate" style="width:auto;">
                         <input type="month" class="form-input" id="reportMonth" style="width:auto;display:none;">
                         <button class="btn btn-primary" onclick="loadReport()">Jana Laporan</button>
-                        <button class="btn btn-outline" onclick="exportCSV()">📥 Eksport CSV</button>
+                        <button class="btn btn-outline" onclick="exportCSV()">📥 CSV</button>
+                        <button class="btn btn-outline" onclick="exportPDF()" style="background:var(--danger);color:white;border-color:var(--danger);">📄 PDF</button>
                         <button class="btn btn-outline" onclick="window.print()">🖨️ Cetak</button>
                     </div>
                 </div>
@@ -39,6 +42,9 @@
         if (!user) return;
         document.getElementById('sidebar').innerHTML = APP.renderSidebar(user);
         APP.initSidebar('reports');
+        APP.initProtectedNav();
+        APP.initInactivityTimer();
+        await APP.enforceShiftGate();
 
         document.getElementById('reportDate').value = new Date().toISOString().split('T')[0];
         document.getElementById('reportMonth').value = new Date().toISOString().substring(0, 7);
@@ -156,6 +162,99 @@
         const type = document.getElementById('reportType').value;
         const date = document.getElementById('reportDate').value;
         window.open(`/api/reports/export?type=${type}&date=${date}`, '_blank');
+    }
+
+    async function exportPDF() {
+        const type = document.getElementById('reportType').value;
+        const isDaily = type === 'daily';
+        const date = isDaily ? document.getElementById('reportDate').value : document.getElementById('reportMonth').value;
+        let data;
+        try {
+            data = isDaily
+                ? await APP.api(`/api/reports/daily?date=${date}`)
+                : await APP.api(`/api/reports/monthly?month=${date}`);
+        } catch (e) { APP.toast('Jana laporan dahulu sebelum eksport PDF.', 'error'); return; }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+        // Header
+        doc.setFillColor(30, 58, 95);
+        doc.rect(0, 0, 210, 32, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20); doc.setFont('helvetica', 'bold');
+        doc.text('N.A.D.I.', 14, 14);
+        doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+        doc.text('Sistem Jualan Koperasi Sekolah', 14, 21);
+        doc.text(`Laporan ${isDaily ? 'Harian' : 'Bulanan'}: ${date}`, 14, 28);
+        doc.text(`Dicetak: ${new Date().toLocaleString('ms-MY')}`, 210 - 14, 28, { align: 'right' });
+
+        doc.setTextColor(0, 0, 0);
+        let y = 42;
+
+        if (isDaily) {
+            const s = data.summary;
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+            doc.text('Ringkasan Harian', 14, y); y += 6;
+            doc.autoTable({
+                startY: y,
+                head: [['Perkara', 'Nilai']],
+                body: [
+                    ['Jumlah Hasil', APP.formatRM(s.total_revenue)],
+                    ['Transaksi', s.total_transactions],
+                    ['Tunai', APP.formatRM(s.cash_total)],
+                    ['QR Pay', APP.formatRM(s.qr_total)],
+                    ['Dibatal', s.voided_count],
+                    ['Diskaun', APP.formatRM(s.total_discounts)],
+                ],
+                theme: 'grid',
+                headStyles: { fillColor: [30, 58, 95] },
+                margin: { left: 14, right: 14 }
+            });
+            y = doc.lastAutoTable.finalY + 10;
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+            doc.text('Senarai Transaksi', 14, y); y += 4;
+            doc.autoTable({
+                startY: y,
+                head: [['No. Resit', 'Masa', 'Bayaran', 'Jumlah', 'Status']],
+                body: data.sales.map(s => [s.receipt_no, s.sale_time?.substring(11,16)||'-', s.payment_method === 'cash' ? 'Tunai' : 'QR Pay', APP.formatRM(s.total_amount), s.status === 'completed' ? 'Selesai' : 'Dibatal']),
+                theme: 'striped',
+                headStyles: { fillColor: [37, 99, 235] },
+                margin: { left: 14, right: 14 }
+            });
+        } else {
+            const t = data.totals;
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+            doc.text('Ringkasan Bulanan', 14, y); y += 6;
+            doc.autoTable({
+                startY: y,
+                head: [['Perkara', 'Nilai']],
+                body: [
+                    ['Jumlah Hasil', APP.formatRM(t.revenue)],
+                    ['Transaksi', t.transactions],
+                    ['Tunai', APP.formatRM(t.cash)],
+                    ['QR Pay', APP.formatRM(t.qr)],
+                    ['Hari Beroperasi', t.days],
+                ],
+                theme: 'grid',
+                headStyles: { fillColor: [30, 58, 95] },
+                margin: { left: 14, right: 14 }
+            });
+            y = doc.lastAutoTable.finalY + 10;
+            doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+            doc.text('Pecahan Harian', 14, y); y += 4;
+            doc.autoTable({
+                startY: y,
+                head: [['Tarikh', 'Transaksi', 'Tunai', 'QR', 'Jumlah']],
+                body: data.dailyData.map(d => [d.sale_date, d.transactions, APP.formatRM(d.cash), APP.formatRM(d.qr), APP.formatRM(d.revenue)]),
+                theme: 'striped',
+                headStyles: { fillColor: [37, 99, 235] },
+                margin: { left: 14, right: 14 }
+            });
+        }
+
+        doc.save(`NADI-Laporan-${type}-${date}.pdf`);
+        APP.toast('PDF berjaya dieksport!', 'success');
     }
     </script>
 </body>

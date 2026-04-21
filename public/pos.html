@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terminal POS — KoperasiPOS</title>
+    <title>Terminal POS — N.A.D.I.</title>
     <link rel="stylesheet" href="/css/app.css">
     <link rel="stylesheet" href="/css/pos.css">
     <link rel="stylesheet" href="/css/print.css">
@@ -13,7 +13,7 @@
         <!-- Left: Products -->
         <div class="pos-products">
             <div class="pos-top-bar">
-                <a href="/dashboard" class="brand" style="text-decoration: none; color: var(--accent-hover);"><div class="brand-icon">🏪</div> KoperasiPOS</a>
+                <a href="/dashboard" class="brand" style="text-decoration: none; color: var(--accent-hover);"><div class="brand-icon">🏪</div> N.A.D.I.</a>
                 <div class="pos-search">
                     <span class="search-icon">🔍</span>
                     <input type="text" id="searchInput" placeholder="Cari produk atau imbas kod bar...">
@@ -39,7 +39,7 @@
             <div class="cart-footer">
                 <div class="cart-totals">
                     <div class="cart-total-row"><span>Jumlah Kecil</span><span id="subtotalDisplay">RM 0.00</span></div>
-                    <div class="cart-total-row">
+                    <div class="cart-total-row" id="discountRow">
                         <span>Diskaun</span>
                         <span><input type="number" id="discountInput" value="0" min="0" step="0.10" style="width:80px;padding:4px 8px;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:0.85rem;text-align:right;font-family:inherit"></span>
                     </div>
